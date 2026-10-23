@@ -3,8 +3,8 @@
 #ifndef VAT7_WINDOW_H
 #define VAT7_WINDOW_H
 
-#include "render_target.h"
-#include "engine_core/eng_input.h"  // For vat7_InputState
+#include "vat7_render_target.h"
+#include "vat7_input.h"  // For vat7_InputState
 
 
 // Defined in platform source code

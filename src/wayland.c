@@ -5,24 +5,26 @@
 #define _GNU_SOURCE
 #endif
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #include <sys/mman.h>
 #include <linux/input-event-codes.h>
 #include <unistd.h>
 
 #include <wayland-client.h>
-#include "xdg-shell-client-protocol.h"
+#include "../wayland_client/xdg-shell-client-protocol.h"
 
-#include "vat7_window.h"
-#include "vat7_input.h"
-#include "render_target.h" // TODO sort how this dependency will work
+#include "../include/vat7_window.h"
+#include "../include/vat7_input.h"
+#include "../include/vat7_render_target.h"
 
 //TODO update these
-#include "engine_tools/eng_logging.h"
-#include "engine_tools/eng_profiling.h"
+#include "../../../common/logging/vat7_logger.h"
+#include "../../../common/profiling/vat7_profiler.h"
 
 
 // define not const because type varies. This should really be 2 or 3,
@@ -213,8 +215,7 @@ struct vat7_WindowContext
 	bool buffers_busy[NUMBER_OF_PIXEL_BUFFERS];
 	size_t render_buffer;
 
-	LinuxAudioContext *audio_context;
-	Vat7_InputState input_context;
+	vat7_InputState input_context;
 };
 
 
@@ -617,13 +618,13 @@ static void vat7_set_buffer_not_busy (void *data, struct wl_buffer *wlb)
 		if (wc->buffers[i] == wlb)
 		{
 			wc->buffers_busy[i] = false;
-			TRACE_LOG("Buffer %zu marked free", i);
+			VT7_LOG_TRACE("Buffer %zu marked free", i);
 			break;
 		}
 		if (i == NUMBER_OF_PIXEL_BUFFERS - 1)
 		{
 
-			WARNING_LOG("Wayland buffer released but no buffer \
+			VT7_LOG_WARNING("Wayland buffer released but no buffer \
 				set not busy.");
 		}
 	}
@@ -702,7 +703,7 @@ static void vat7_compositor_ready (void *data, struct wl_callback *cb,
 	uint32_t time)
 {
 	(void)time;
-	TRACE_LOG("Callback time: %d", time);
+	VT7_LOG_TRACE("Callback time: %d", time);
 	vat7_WindowContext *wc = data;
 	wl_callback_destroy(cb);
 	wc->frame_callback = NULL;
@@ -948,12 +949,6 @@ static void vat7_pump_wayland_events (vat7_WindowContext *wc)
 /* API Functions */
 void vat7_win_io_quit(vat7_WindowContext *wc)
 {
-	if (wc->audio_context != NULL)
-	{
-		vat7_win_io_shutdown_linux_audio(wc->audio_context);
-		wc->audio_context = NULL;
-	}
-
 	// Need in case shutdown happens while a callback is active
 	if (wc->frame_callback != NULL)
 	{
@@ -1031,28 +1026,43 @@ void vat7_win_io_quit(vat7_WindowContext *wc)
 		wc->display = NULL;
 	}
 
-	vat7_shutdown_main_memory();
 	munmap(wc->main_mem_ptr, wc->main_mem_size);
-	INFO_LOG("Wayland display disconnected. Platform quit successful.");
+	free(wc);
+	VT7_LOG_INFO("Wayland display disconnected. Platform quit successful.");
 }
 
 
 vat7_WindowContext *vat7_win_io_init (void)
 {
+	// WINDOW CONTEXT
+	vat7_WindowContext *wc =
+		(vat7_WindowContext *)malloc(sizeof(vat7_WindowContext));
+
+	// Pixel Buffer
+	int32_t width = 960;
+	wc->pb_width = width;
+	int32_t height = 512;
+	wc->pb_height = height;
+	int32_t pixel_bytes = 4;
+	int32_t stride = width * pixel_bytes;
+	int32_t pixel_buffer_size = width * height * pixel_bytes;
+	size_t buffers_mem =
+		(size_t)(pixel_buffer_size * NUMBER_OF_PIXEL_BUFFERS);
+
 	// MEMORY
 	// TODO Add error checking for all of this
 	// TODO Implement new allocator for this since not using the
 	// one from the old project
 	int fd = memfd_create("pg_mem_block", MFD_CLOEXEC);
-	size_t main_mem_bytes = 536870912u;
+	//TODO clean this up. For now just patching in to get new
+	//architecture hooked up for proof of concept
+	//In particular, rename!
+	size_t main_mem_bytes = buffers_mem;
 	ftruncate(fd, (off_t)main_mem_bytes);
 	void *mem = mmap(NULL, main_mem_bytes,
 		PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	init_memory(mem, main_mem_bytes);
 
-	// WINDOW CONTEXT
-	vat7_WindowContext *wc =
-		(vat7_WindowContext *)vat7_alloc(sizeof(vat7_WindowContext));
+
 	// for freeing on quit
 	wc->main_mem_ptr = mem;
 	wc->main_mem_size = main_mem_bytes;
@@ -1068,49 +1078,26 @@ vat7_WindowContext *vat7_win_io_init (void)
 	wc->display = wl_display_connect(NULL);
 	if (!(wc->display))
 	{
-		CRITICAL_LOG("Wayland display failed to connect.");
+		VT7_LOG_CRITICAL("Wayland display failed to connect.");
 		return NULL;
 	}
-	INFO_LOG("Wayland display connected.");
+	VT7_LOG_INFO("Wayland display connected.");
 	// TODO error handling on get registry
 	wc->registry = wl_display_get_registry(wc->display);
 	wl_registry_add_listener(wc->registry, &vat7_registry_listener, wc);
 	wl_display_roundtrip(wc->display);
 	wc->surface = wl_compositor_create_surface(wc->compositor);
-	vat7_ASSERT(main_mem_bytes <= INT32_MAX);
+	assert(main_mem_bytes <= INT32_MAX);
 	wc->shm_pool = wl_shm_create_pool(wc->shm, fd,
 		(int32_t)main_mem_bytes);
 
-	// Pixel Buffer
-	int32_t width = 960;
-	wc->pb_width = width;
-	int32_t height = 512;
-	wc->pb_height = height;
-	int32_t pixel_bytes = 4;
-	int32_t stride = width * pixel_bytes;
-	int32_t pixel_buffer_size = width * height * pixel_bytes;
-	size_t buffers_mem =
-		(size_t)(pixel_buffer_size * NUMBER_OF_PIXEL_BUFFERS);
 	// TODO make buffer plural for clarity
-	wc->pixel_buffer = (uint8_t *)vat7_alloc(buffers_mem);
-	vat7_ASSERT(wc->pixel_buffer != NULL);
-	if ((uintptr_t)(wc->pixel_buffer) < (uintptr_t)mem)
-	{
-		CRITICAL_LOG("pixel buffer pointer less than mem pointer");
-		vat7_win_io_quit(wc);
-		return NULL;
-	}
-	uintptr_t offset = (uintptr_t)wc->pixel_buffer - (uintptr_t)mem;
-	if (offset > INT32_MAX)
-	{
-		CRITICAL_LOG("Wayland buffer offset exceeds max size");
-		vat7_win_io_quit(wc);
-		return NULL;
-	}
+	wc->pixel_buffer = (uint8_t *)mem;
+	assert(wc->pixel_buffer != NULL);
 	for (int32_t i = 0; i < NUMBER_OF_PIXEL_BUFFERS; i++)
 	{
 		wc->buffers[i] = wl_shm_pool_create_buffer(wc->shm_pool,
-			(int32_t)offset + i * (int32_t)pixel_buffer_size,
+			i * (int32_t)pixel_buffer_size,
 			width, height, stride, WL_SHM_FORMAT_XRGB8888);
 		wc->buffers_busy[i] = false;
 		wl_buffer_add_listener(wc->buffers[i], &vat7_buffer_listener,
@@ -1134,7 +1121,7 @@ vat7_WindowContext *vat7_win_io_init (void)
 }
 
 
-vat7_InputState *vat7_win_io_get_input (vat7_WindowContext *wc)
+vat7_InputState *vat7_win_io_get_input_state (vat7_WindowContext *wc)
 {
 	vat7_pump_wayland_events(wc);
 	return &(wc->input_context);
@@ -1148,7 +1135,7 @@ vat7_RenderTarget vat7_win_io_get_render_target (vat7_WindowContext *wc)
 		if (!wc->buffers_busy[i])
 		{
 			wc->render_buffer = i;
-			TRACE_LOG("Render Buffer set to %zu", \
+			VT7_LOG_TRACE("Render Buffer set to %zu", \
 				wc->render_buffer);
 			wc->buffers_busy[wc->render_buffer] = true;
 			size_t pb_size =
@@ -1164,7 +1151,7 @@ vat7_RenderTarget vat7_win_io_get_render_target (vat7_WindowContext *wc)
 		}
 	}
 	// TODO carefully log this NULL return behavior
-	WARNING_LOG("Returning NULL render target");
+	VT7_LOG_WARNING("Returning NULL render target");
 	return vat7_NULL_RENDER_TARGET;
 }
 
@@ -1179,7 +1166,7 @@ void vat7_win_io_present (vat7_WindowContext *wc)
 	if (wc->frame_callback == NULL)
 	{
 		cm++;
-		PROFILE_BEGIN(Wayland_Commit);
+		VT7_PROFILE_BEGIN(Wayland_Commit);
 		wl_surface_attach(wc->surface, wc->buffers[wc->render_buffer],
 			0, 0);
 		wl_surface_damage(wc->surface, 0, 0, wc->pb_width,
@@ -1189,16 +1176,16 @@ void vat7_win_io_present (vat7_WindowContext *wc)
 			&vat7_frame_listener, wc);
 		wl_surface_commit(wc->surface);
 		wl_display_flush(wc->display);
-		TRACE_LOG("Presented Buffer %zu", wc->render_buffer);
-		TRACE_LOG("Commit Number: %d", cm);
-		PROFILE_END();
+		VT7_LOG_TRACE("Presented Buffer %zu", wc->render_buffer);
+		VT7_LOG_TRACE("Commit Number: %d", cm);
+		VT7_PROFILE_END();
 	}
 	else
 	{
 		// Free the buffer that wasn't committed to the
 		// compositor since it never took ownership.
 		wc->buffers_busy[wc->render_buffer] = false;
-		TRACE_LOG("Buffer %zu marked free", wc->render_buffer);
+		VT7_LOG_TRACE("Buffer %zu marked free", wc->render_buffer);
 	}
 
 }

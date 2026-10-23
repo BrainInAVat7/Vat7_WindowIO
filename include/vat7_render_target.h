@@ -5,8 +5,8 @@
 #define VAT7_RENDER_TARGET_H
 
 
-#include "engine_libc/eng_stdint.h"
-#include "engine_core/eng_render.h"
+#include <stdint.h>
+#include <stddef.h>
 
 
 typedef struct
@@ -27,9 +27,6 @@ static const vat7_RenderTarget vat7_NULL_RENDER_TARGET =
 	.pixel_bytes = 0,
 	.flags = 0,
 };
-
-
-void vat7_render (vat7_RenderTarget render_target, vat7_RenderCommandBuffer *rcb);
 
 
 #endif  // header guard
