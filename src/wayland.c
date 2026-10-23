@@ -22,8 +22,8 @@
 #include "../include/vat7_input.h"
 #include "../include/vat7_render_target.h"
 
-#include "../../../common/logging/vat7_logger.h"
-#include "../../../common/profiling/vat7_profiler.h"
+#include "logging/vat7_logger.h"
+#include "profiling/vat7_profiler.h"
 
 
 // define not const because type varies. This should really be 2 or 3,
