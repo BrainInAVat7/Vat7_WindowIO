@@ -22,7 +22,6 @@
 #include "../include/vat7_input.h"
 #include "../include/vat7_render_target.h"
 
-//TODO update these
 #include "../../../common/logging/vat7_logger.h"
 #include "../../../common/profiling/vat7_profiler.h"
 
@@ -207,8 +206,8 @@ struct vat7_WindowContext
 	struct wl_seat *seat;
 	struct wl_keyboard *keyboard;
 	struct wl_pointer *pointer;
-	void *main_mem_ptr;
-	size_t main_mem_size;
+	void *buffers_mem_ptr;
+	size_t buffers_mem_size;
 	uint8_t *pixel_buffer;
 	int32_t pb_height;
 	int32_t pb_width;
@@ -1026,7 +1025,7 @@ void vat7_win_io_quit(vat7_WindowContext *wc)
 		wc->display = NULL;
 	}
 
-	munmap(wc->main_mem_ptr, wc->main_mem_size);
+	munmap(wc->buffers_mem_ptr, wc->buffers_mem_size);
 	free(wc);
 	VT7_LOG_INFO("Wayland display disconnected. Platform quit successful.");
 }
@@ -1038,7 +1037,7 @@ vat7_WindowContext *vat7_win_io_init (void)
 	vat7_WindowContext *wc =
 		(vat7_WindowContext *)malloc(sizeof(vat7_WindowContext));
 
-	// Pixel Buffer
+	// PIXEL BUFFER SIZE
 	int32_t width = 960;
 	wc->pb_width = width;
 	int32_t height = 512;
@@ -1046,26 +1045,17 @@ vat7_WindowContext *vat7_win_io_init (void)
 	int32_t pixel_bytes = 4;
 	int32_t stride = width * pixel_bytes;
 	int32_t pixel_buffer_size = width * height * pixel_bytes;
-	size_t buffers_mem =
+	size_t buffers_mem_size =
 		(size_t)(pixel_buffer_size * NUMBER_OF_PIXEL_BUFFERS);
 
-	// MEMORY
-	// TODO Add error checking for all of this
-	// TODO Implement new allocator for this since not using the
-	// one from the old project
+	// SHARED MEMORY FOR WAYLAND PIXEL BUFFER
 	int fd = memfd_create("pg_mem_block", MFD_CLOEXEC);
-	//TODO clean this up. For now just patching in to get new
-	//architecture hooked up for proof of concept
-	//In particular, rename!
-	size_t main_mem_bytes = buffers_mem;
-	ftruncate(fd, (off_t)main_mem_bytes);
-	void *mem = mmap(NULL, main_mem_bytes,
+	ftruncate(fd, (off_t)buffers_mem_size);
+	void *buffers_mem_ptr = mmap(NULL, buffers_mem_size,
 		PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-
-
 	// for freeing on quit
-	wc->main_mem_ptr = mem;
-	wc->main_mem_size = main_mem_bytes;
+	wc->buffers_mem_ptr = buffers_mem_ptr;
+	wc->buffers_mem_size = buffers_mem_size;
 
 	// INPUT
 	vat7_InputState ic;
@@ -1087,12 +1077,12 @@ vat7_WindowContext *vat7_win_io_init (void)
 	wl_registry_add_listener(wc->registry, &vat7_registry_listener, wc);
 	wl_display_roundtrip(wc->display);
 	wc->surface = wl_compositor_create_surface(wc->compositor);
-	assert(main_mem_bytes <= INT32_MAX);
+	assert(buffers_mem_size <= INT32_MAX);
 	wc->shm_pool = wl_shm_create_pool(wc->shm, fd,
-		(int32_t)main_mem_bytes);
+		(int32_t)buffers_mem_size);
 
 	// TODO make buffer plural for clarity
-	wc->pixel_buffer = (uint8_t *)mem;
+	wc->pixel_buffer = (uint8_t *)buffers_mem_ptr;
 	assert(wc->pixel_buffer != NULL);
 	for (int32_t i = 0; i < NUMBER_OF_PIXEL_BUFFERS; i++)
 	{
