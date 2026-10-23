@@ -1,6 +1,6 @@
 /* Placeholder for mac window_io version */
 
-#include <stdlib.c>
+#include <stdlib.h>
 
 //temporary placholder
 typedef struct

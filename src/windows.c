@@ -1,6 +1,6 @@
 /* Placeholder for windows window_io version */
 
-#include <stdlib.c>
+#include <stdlib.h>
 
 //temporary placholder
 typedef struct
