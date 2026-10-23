@@ -214,7 +214,7 @@ struct vat7_WindowContext
 	bool buffers_busy[NUMBER_OF_PIXEL_BUFFERS];
 	size_t render_buffer;
 
-	vat7_InputState input_context;
+	vat7_InputState input_state;
 };
 
 
@@ -668,12 +668,12 @@ static void vat7_xdg_toplevel_close (void *data, struct xdg_toplevel *xdgtl)
 	// Do nothing
 	(void)xdgtl;
 	vat7_WindowContext *wc = data;
-	size_t bc = wc->input_context.buffer_count;
+	size_t bc = wc->input_state.buffer_count;
 	vat7_InputEvent ie;
 	ie.type = vat7_QUIT;
 	ie.key = vat7_NULL_KEY;
-	wc->input_context.buffer[bc] = ie;
-	wc->input_context.buffer_count++;
+	wc->input_state.buffer[bc] = ie;
+	wc->input_state.buffer_count++;
 }
 
 
@@ -792,9 +792,9 @@ static void vat7_wl_keyboard_key (void *data, struct wl_keyboard *keyboard,
 	if (state == 1) ie.type = vat7_KEY_DOWN;
 	else if (state == 0) ie.type = vat7_KEY_UP;
 	ie.key = get_engine_key_value(key);
-	size_t bc = wc->input_context.buffer_count;
-	wc->input_context.buffer[bc] = ie;
-	wc->input_context.buffer_count++;
+	size_t bc = wc->input_state.buffer_count;
+	wc->input_state.buffer[bc] = ie;
+	wc->input_state.buffer_count++;
 }
 
 
@@ -860,8 +860,8 @@ static void vat7_wl_pointer_motion (void *data, struct wl_pointer *pointer,
 	int x = wl_fixed_to_int(surface_x);
 	int y = wl_fixed_to_int(surface_y);
 
-	wc->input_context.mouse_x = (uint16_t)x;
-	wc->input_context.mouse_y = (uint16_t)y;
+	wc->input_state.mouse_x = (uint16_t)x;
+	wc->input_state.mouse_y = (uint16_t)y;
 }
 
 
@@ -878,9 +878,9 @@ static void vat7_wl_pointer_button (void *data, struct wl_pointer *pointer,
 	if (state == 1) ie.type = vat7_MOUSE_DOWN;
 	else if (state == 0) ie.type = vat7_MOUSE_UP;
 	ie.key = get_engine_mouse_button_value(button);
-	size_t bc = wc->input_context.buffer_count;
-	wc->input_context.buffer[bc] = ie;
-	wc->input_context.buffer_count++;
+	size_t bc = wc->input_state.buffer_count;
+	wc->input_state.buffer[bc] = ie;
+	wc->input_state.buffer_count++;
 }
 
 
@@ -1058,11 +1058,9 @@ vat7_WindowContext *vat7_win_io_init (void)
 	wc->buffers_mem_size = buffers_mem_size;
 
 	// INPUT
-	vat7_InputState ic;
-	ic.buffer_count = 0u;
-	ic.mouse_x = 0u;
-	ic.mouse_y = 0u;
-	wc->input_context = ic;
+	wc->input_state.buffer_count = 0u;
+	wc->input_state.mouse_x = 0u;
+	wc->input_state.mouse_y = 0u;
 
 	// WAYLAND
 	wc->display = wl_display_connect(NULL);
@@ -1101,8 +1099,8 @@ vat7_WindowContext *vat7_win_io_init (void)
 	xdg_surface_add_listener(wc->xdg_surface, &vat7_xdg_surface_listener,
 		wc);
 	wc->xdg_toplevel = xdg_surface_get_toplevel(wc->xdg_surface);
-	xdg_toplevel_add_listener(wc->xdg_toplevel, &vat7_xdg_toplevel_listener,
-		wc);
+	xdg_toplevel_add_listener(wc->xdg_toplevel,
+			&vat7_xdg_toplevel_listener, wc);
 	xdg_toplevel_set_title(wc->xdg_toplevel, "Wayland Test Window");
 
 	close(fd);
@@ -1114,7 +1112,7 @@ vat7_WindowContext *vat7_win_io_init (void)
 vat7_InputState *vat7_win_io_get_input_state (vat7_WindowContext *wc)
 {
 	vat7_pump_wayland_events(wc);
-	return &(wc->input_context);
+	return &(wc->input_state);
 }
 
 
