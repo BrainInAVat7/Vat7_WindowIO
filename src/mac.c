@@ -2,6 +2,10 @@
 
 #include <stdlib.h>
 
+#include "../include/vat7_window.h"
+#include "../include/vat7_input.h"
+#include "../include/vat7_render_target.h"
+
 //temporary placholder
 typedef struct
 {
