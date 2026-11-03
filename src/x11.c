@@ -17,6 +17,8 @@
 struct vat7_WindowContext
 {
 	xcb_connection_t *xcb_connection;
+	xcb_screen_t *xcb_screen;
+	xcb_window_t xcb_window;
 	vat7_InputState input_state;
 };
 
@@ -40,12 +42,25 @@ vat7_WindowContext *vat7_win_io_init (void)
 	/* XCB */
 	//TODO add error checking and logging
 	wc->xcb_connection = xcb_connect(NULL, NULL);
+	wc->xcb_screen = xcb_setup_roots_iterator(
+			xcb_get_setup(wc->xcb_connection)).data;
+	wc->xcb_window = xcb_generate_id(wc->xcb_connection);
+	xcb_create_window(
+			wc->xcb_connection,
+			XCB_COPY_FROM_PARENT,
+			wc->xcb_window,
+			wc->xcb_screen->root,
+			0, 0,			// x, y
+			960, 512,		// width, height
+			0,			// border width
+			XCB_WINDOW_CLASS_INPUT_OUTPUT,
+			wc->xcb_screen->root_visual,
+			0, NULL
+			);
+	xcb_map_window(wc->xcb_connection, wc->xcb_window);
+	xcb_flush(wc->xcb_connection);
+	//TODO handle desktop scaling and remove window decorations
 
-	xcb_screen_t *screen =
-		xcb_setup_roots_iterator(xcb_get_setup(wc->xcb_connection)).data;
-
-	VT7_LOG_INFO("Screen width = %"PRIu16"\n", screen->width_in_pixels);
-	VT7_LOG_INFO("Screen height = %"PRIu16"\n", screen->height_in_pixels);
 
 	return wc;
 }
