@@ -20,7 +20,10 @@ struct vat7_WindowContext
 	xcb_connection_t *xcb_connection;
 	xcb_screen_t *xcb_screen;
 	xcb_window_t xcb_window;
+	xcb_gcontext_t xcb_graphics_context;
 	vat7_InputState input_state;
+	uint32_t pixel_buffer_len;
+	uint8_t *pixel_buffer;
 };
 
 
@@ -49,6 +52,7 @@ typedef struct
 void vat7_win_io_quit(vat7_WindowContext *wc)
 {
 	xcb_disconnect(wc->xcb_connection);
+	free(wc->pixel_buffer);
 	free(wc);
 }
 
@@ -58,9 +62,17 @@ vat7_WindowContext *vat7_win_io_init (void)
 	vat7_WindowContext *wc =
 		(vat7_WindowContext *)malloc(sizeof(vat7_WindowContext));
 
+	/* Input State Initialization */
 	wc->input_state.buffer_count = 0u;
 	wc->input_state.mouse_x = 0u;
 	wc->input_state.mouse_y = 0u;
+
+	/* Create Pixel Buffer */
+	// TODO use mmap here instead
+	uint32_t pixel_buffer_len = 960 * 512 * 4;  // TODO no magic numbers
+	wc->pixel_buffer =
+		(uint8_t *)malloc((size_t)pixel_buffer_len * sizeof(uint8_t));
+	wc->pixel_buffer_len = pixel_buffer_len;
 
 	/* XCB */
 	//TODO add error checking and logging
@@ -110,6 +122,16 @@ vat7_WindowContext *vat7_win_io_init (void)
 			5, //number of fields in motif_hints struct,
 			&motif_hints);
 	free(reply);
+	/* Create XCB graphics Context */
+	wc->xcb_graphics_context = xcb_generate_id(wc->xcb_connection);
+	uint32_t xcb_gc_mask = XCB_GC_FOREGROUND;
+	uint32_t xcb_gc_value_list[1];
+	xcb_gc_value_list[0] = wc->xcb_screen->black_pixel;
+	xcb_create_gc(wc->xcb_connection,
+			wc->xcb_graphics_context,
+			wc->xcb_window,
+			xcb_gc_mask,
+			xcb_gc_value_list);
 
 	xcb_map_window(wc->xcb_connection, wc->xcb_window);
 	xcb_flush(wc->xcb_connection);
@@ -137,4 +159,5 @@ vat7_RenderTarget vat7_win_io_get_render_target (vat7_WindowContext *wc)
 void vat7_win_io_present (vat7_WindowContext *wc)
 {
 	(void)wc;
+	//TODO use xcb_put_image. Keep ZPixmap format in mind.
 }
