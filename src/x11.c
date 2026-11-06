@@ -24,6 +24,9 @@ struct vat7_WindowContext
 	vat7_InputState input_state;
 	uint32_t pixel_buffer_len;
 	uint8_t *pixel_buffer;
+	uint8_t pixel_size;
+	uint16_t width;
+	uint16_t height;
 };
 
 
@@ -61,6 +64,7 @@ vat7_WindowContext *vat7_win_io_init (void)
 {
 	vat7_WindowContext *wc =
 		(vat7_WindowContext *)malloc(sizeof(vat7_WindowContext));
+	if (wc == NULL) return NULL;
 
 	/* Input State Initialization */
 	wc->input_state.buffer_count = 0u;
@@ -69,10 +73,20 @@ vat7_WindowContext *vat7_win_io_init (void)
 
 	/* Create Pixel Buffer */
 	// TODO use mmap here instead
-	uint32_t pixel_buffer_len = 960 * 512 * 4;  // TODO no magic numbers
+	wc->width = 960;
+	wc->height = 512;
+	wc->pixel_size = 4;
+	uint32_t pixel_buffer_len = (uint32_t)wc->width
+				* (uint32_t)wc->height
+				* (uint32_t)wc->pixel_size;
 	wc->pixel_buffer =
 		(uint8_t *)malloc((size_t)pixel_buffer_len * sizeof(uint8_t));
+	if (wc->pixel_buffer == NULL) return NULL;
 	wc->pixel_buffer_len = pixel_buffer_len;
+	for (size_t i = 0; i < pixel_buffer_len; i++)
+	{
+		wc->pixel_buffer[i] = 0;
+	}
 
 	/* XCB */
 	//TODO add error checking and logging
@@ -80,18 +94,21 @@ vat7_WindowContext *vat7_win_io_init (void)
 	wc->xcb_screen = xcb_setup_roots_iterator(
 			xcb_get_setup(wc->xcb_connection)).data;
 	wc->xcb_window = xcb_generate_id(wc->xcb_connection);
-	xcb_create_window(
-			wc->xcb_connection,
+	uint32_t mask = XCB_CW_EVENT_MASK;
+	uint32_t values[1];
+	values[0] = XCB_EVENT_MASK_EXPOSURE
+		| XCB_EVENT_MASK_KEY_PRESS;
+	xcb_create_window(wc->xcb_connection,
 			XCB_COPY_FROM_PARENT,
 			wc->xcb_window,
 			wc->xcb_screen->root,
-			0, 0,			// x, y
-			960, 512,		// width, height
+			0, 0,			// x, y on screen
+			(uint16_t)wc->width, (uint16_t)wc->height,
 			0,			// border width
 			XCB_WINDOW_CLASS_INPUT_OUTPUT,
 			wc->xcb_screen->root_visual,
-			0, NULL
-			);
+			mask,
+			values);
 	/* Disable Window Decorations */
 	/* 15 in 3rd parameter is strlen("_MOTIF_WM_HINTS"), but I'm not
 	 * including string.h just for that */
@@ -135,9 +152,29 @@ vat7_WindowContext *vat7_win_io_init (void)
 
 	xcb_map_window(wc->xcb_connection, wc->xcb_window);
 	xcb_flush(wc->xcb_connection);
-	//TODO handle desktop scaling, and make window position consistent
-	//accross machines
 
+	xcb_generic_event_t *e;
+	while((e = xcb_wait_for_event(wc->xcb_connection)))
+	{
+		if ((e->response_type & ~0x80) == XCB_EXPOSE)
+		{
+			xcb_put_image(wc->xcb_connection,
+					XCB_IMAGE_FORMAT_Z_PIXMAP,
+					wc->xcb_window,
+					wc->xcb_graphics_context,
+					wc->width,
+					wc->height,
+					0,
+					0,
+					0,
+					wc->xcb_screen->root_depth,
+					wc->pixel_buffer_len * sizeof(uint8_t),
+					wc->pixel_buffer);
+			xcb_flush(wc->xcb_connection);
+			break;
+		}
+	}
+	//TODO handle desktop scaling
 
 	return wc;
 }
@@ -145,19 +182,55 @@ vat7_WindowContext *vat7_win_io_init (void)
 
 vat7_InputState *vat7_win_io_get_input_state (vat7_WindowContext *wc)
 {
+	xcb_generic_event_t *e;
+	while((e = xcb_poll_for_event(wc->xcb_connection)))
+	{
+		if (e == NULL) break;
+		switch ((e->response_type & ~0x80))
+		{
+			case XCB_KEY_PRESS:
+				{
+					vat7_InputEvent ie;
+					ie.type = vat7_QUIT;
+					ie.key = vat7_NULL_KEY;
+					uint16_t bc =
+						wc->input_state.buffer_count++;
+					wc->input_state.buffer[bc] = ie;
+					break;
+				}
+			default: break;
+		}
+	}
+	free(e);
 	return &(wc->input_state);
 }
 
 
 vat7_RenderTarget vat7_win_io_get_render_target (vat7_WindowContext *wc)
 {
-	(void)wc;
-	return vat7_NULL_RENDER_TARGET;
+	vat7_RenderTarget rt;
+	rt.width = wc->width;
+	rt.height = wc->height;
+	rt.pixel_bytes = wc->pixel_size;
+	rt.pixel_buffer = wc->pixel_buffer;
+	rt.flags = 0;
+	return rt;
 }
 
 
 void vat7_win_io_present (vat7_WindowContext *wc)
 {
-	(void)wc;
-	//TODO use xcb_put_image. Keep ZPixmap format in mind.
+	xcb_put_image(wc->xcb_connection,
+			XCB_IMAGE_FORMAT_Z_PIXMAP,
+			wc->xcb_window,
+			wc->xcb_graphics_context,
+			wc->width,
+			wc->height,
+			0,
+			0,
+			0,
+			wc->xcb_screen->root_depth,
+			wc->pixel_buffer_len * sizeof(uint8_t),
+			wc->pixel_buffer);
+	xcb_flush(wc->xcb_connection);
 }
