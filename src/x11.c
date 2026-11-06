@@ -577,6 +577,10 @@ vat7_InputState *vat7_win_io_get_input_state (vat7_WindowContext *wc)
 			case XCB_MOTION_NOTIFY:
 			{
 				//TODO mouse coordinates
+				xcb_motion_notify_event_t *me;
+				me = (xcb_motion_notify_event_t *)e;
+				wc->input_state.mouse_x = (uint16_t)me->event_x;
+				wc->input_state.mouse_y = (uint16_t)me->event_y;
 				break;
 			}
 			default:
