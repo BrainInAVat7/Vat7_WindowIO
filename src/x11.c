@@ -56,6 +56,32 @@ typedef struct
 
 /* Helper Functions */
 
+
+/* Convert xcb mouse button codes for a mouse click event into an
+ * engine constant.
+ */
+static uint8_t get_engine_mouse_button_value (uint32_t mouse_button)
+{
+	uint8_t eng_key;
+	switch (mouse_button)
+	{
+		case XCB_BUTTON_INDEX_1:
+			eng_key = vat7_MSBTN_LEFT;
+			break;
+		case XCB_BUTTON_INDEX_2:
+			eng_key = vat7_MSBTN_MIDDLE;
+			break;
+		case XCB_BUTTON_INDEX_3:
+			eng_key = vat7_MSBTN_RIGHT;
+			break;
+		default:
+			eng_key = vat7_NULL_KEY;
+			break;
+	}
+	return eng_key;
+}
+
+
 /* Convert linux keycodes for a keyboard event into an engine constant. */
 static uint8_t get_engine_key_value (uint8_t xcb_key)
 {
@@ -566,12 +592,20 @@ vat7_InputState *vat7_win_io_get_input_state (vat7_WindowContext *wc)
 			}
 			case XCB_BUTTON_PRESS:
 			{
-				//TODO mouse button press
+				xcb_button_press_event_t *be =
+					(xcb_button_press_event_t *)e;
+				ie.type = vat7_MOUSE_DOWN;
+				ie.key = get_engine_mouse_button_value(
+								be->detail);
 				break;
 			}
 			case XCB_BUTTON_RELEASE:
 			{
-				//TODO mouse button release
+				xcb_button_release_event_t *be =
+					(xcb_button_release_event_t *)e;
+				ie.type = vat7_MOUSE_UP;
+				ie.key = get_engine_mouse_button_value(
+								be->detail);
 				break;
 			}
 			case XCB_MOTION_NOTIFY:
