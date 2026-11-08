@@ -397,7 +397,7 @@ void vat7_win_io_quit(vat7_WindowContext *wc)
 }
 
 
-vat7_WindowContext *vat7_win_io_init (void)
+vat7_WindowContext *vat7_win_io_init (uint16_t width, uint16_t height)
 {
 	vat7_WindowContext *wc =
 		(vat7_WindowContext *)malloc(sizeof(vat7_WindowContext));
@@ -410,8 +410,8 @@ vat7_WindowContext *vat7_win_io_init (void)
 
 	/* Create Pixel Buffer */
 	// TODO use mmap here instead
-	wc->width = 960;
-	wc->height = 512;
+	wc->width = width;
+	wc->height = height;
 	wc->pixel_size = 4;
 	uint32_t pixel_buffer_len = (uint32_t)wc->width
 				* (uint32_t)wc->height

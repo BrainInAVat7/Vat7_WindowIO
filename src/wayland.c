@@ -1031,17 +1031,15 @@ void vat7_win_io_quit(vat7_WindowContext *wc)
 }
 
 
-vat7_WindowContext *vat7_win_io_init (void)
+vat7_WindowContext *vat7_win_io_init (uint16_t width, uint16_t height)
 {
 	// WINDOW CONTEXT
 	vat7_WindowContext *wc =
 		(vat7_WindowContext *)malloc(sizeof(vat7_WindowContext));
 
 	// PIXEL BUFFER SIZE
-	int32_t width = 960;
-	wc->pb_width = width;
-	int32_t height = 512;
-	wc->pb_height = height;
+	wc->pb_width = (int32_t)width;
+	wc->pb_height = (int32_t)height;
 	int32_t pixel_bytes = 4;
 	int32_t stride = width * pixel_bytes;
 	int32_t pixel_buffer_size = width * height * pixel_bytes;

@@ -6,13 +6,15 @@
 #include "vat7_render_target.h"
 #include "vat7_input.h"  // For vat7_InputState
 
+#include <stdint.h>
+
 
 // Defined in platform source code
 typedef struct vat7_WindowContext vat7_WindowContext;
 
 
 // Functions
-vat7_WindowContext *vat7_win_io_init (void);
+vat7_WindowContext *vat7_win_io_init (uint16_t width, uint16_t height);
 
 vat7_InputState *vat7_win_io_get_input_state (vat7_WindowContext *);
 
