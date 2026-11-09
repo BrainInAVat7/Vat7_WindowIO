@@ -1,5 +1,6 @@
 /* Placeholder for windows window_io version */
 
+#include <stdint.h>
 #include <stdlib.h>
 
 #include "../include/vat7_window.h"
@@ -19,8 +20,10 @@ void vat7_win_io_quit(vat7_WindowContext *wc)
 }
 
 
-vat7_WindowContext *vat7_win_io_init (void)
+vat7_WindowContext *vat7_win_io_init (uint16_t width, uint16_t height)
 {
+	(void)width;
+	(void)height;
 	vat7_WindowContext *wc =
 		(vat7_WindowContext *)malloc(sizeof(vat7_WindowContext));
 
